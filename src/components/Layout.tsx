@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Activity, FileText, Pill, MessageSquare, User, LayoutDashboard, LogOut, CalendarHeart, ArrowUpToLine, ArrowUp, ArrowDown, ActivitySquare, Users } from 'lucide-react';
@@ -7,12 +7,26 @@ import clsx from 'clsx';
 export default function Layout() {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const [profileName, setProfileName] = useState<string>('');
 
   useEffect(() => {
     const mainContent = document.getElementById('main-content');
     if (mainContent) {
       mainContent.scrollIntoView({ behavior: 'smooth' });
     }
+
+    // Fetch profile to get the full name
+    fetch('/api/data/Profile')
+      .then(res => res.ok ? res.json() : [])
+      .then(data => {
+        if (data && data.length > 0) {
+          const latestProfile = data[data.length - 1];
+          if (latestProfile.Name) {
+            setProfileName(latestProfile.Name);
+          }
+        }
+      })
+      .catch(err => console.error('Failed to fetch profile name:', err));
   }, [location.pathname]);
 
   useEffect(() => {
@@ -71,7 +85,7 @@ export default function Layout() {
         <div className="px-4 md:px-6 h-16 flex items-center justify-between">
           <div className="items-center">
             <h1 className="text-lg md:text-xl font-bold text-slate-800">Health Tracker & Lab Analyzer</h1>
-            <div className="lg:block text-sm text-green-600">ชาคริยา กีรติวรการ</div>
+            <div className="lg:block text-sm text-green-600">{profileName || user?.name || 'Loading...'}</div>
           </div>
 
           <div className="flex items-center gap-2 md:gap-4">
