@@ -16,6 +16,7 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
     const getAgeInYears = () => {
       if (!profile?.BirthDate) return null;
       const birthDate = new Date(profile.BirthDate);
+      if (isNaN(birthDate.getTime())) return null;
       const today = new Date();
       let age = today.getFullYear() - birthDate.getFullYear();
       const m = today.getMonth() - birthDate.getMonth();
@@ -76,20 +77,57 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
     }
 
     // Helper to get latest lab value
-    const getLatestLab = (testNames: string[]) => {
-      const matchedLabs = labs.filter(l => 
-        testNames.some(name => l.TestName?.toLowerCase().includes(name.toLowerCase()))
-      );
+    const getLatestLab = (testNames: string[], excludeNames: string[] = []) => {
+      const matchedLabs = labs.filter(l => {
+        const labName = (l.TestName || '').toLowerCase();
+        
+        const checkWord = (k: string) => {
+          const keyword = k.toLowerCase();
+          if (labName === keyword) return true;
+          if (keyword.length <= 4) {
+            const regex = new RegExp(`(^|[^a-z0-9])${keyword}([^a-z0-9]|$)`, 'i');
+            return regex.test(labName);
+          }
+          return labName.includes(keyword);
+        };
+
+        const isMatch = testNames.some(checkWord);
+        const isExcluded = excludeNames.some(checkWord);
+        
+        // Robust value parsing: extract first number found in string
+        const rawVal = l.Value ?? l.ResultValue ?? l.Result ?? l.value;
+        if (rawVal === undefined || rawVal === null) return false;
+        
+        const stringVal = String(rawVal);
+        const match = stringVal.match(/[-+]?\d*\.?\d+/);
+        const val = match ? parseFloat(match[0]) : NaN;
+        
+        return isMatch && !isExcluded && !isNaN(val);
+      });
+      
       if (matchedLabs.length === 0) return null;
+      
       // Sort by date descending
-      matchedLabs.sort((a, b) => new Date(b.Date).getTime() - new Date(a.Date).getTime());
-      return matchedLabs[0];
+      matchedLabs.sort((a, b) => {
+        const dateA = new Date(a.Date).getTime();
+        const dateB = new Date(b.Date).getTime();
+        if (isNaN(dateA) || isNaN(dateB)) return 0;
+        return dateB - dateA;
+      });
+      
+      const best = matchedLabs[0];
+      const rawVal = best.Value ?? best.ResultValue ?? best.Result ?? best.value;
+      const stringVal = String(rawVal);
+      const match = stringVal.match(/[-+]?\d*\.?\d+/);
+      const parsedValue = match ? parseFloat(match[0]) : NaN;
+      
+      return { ...best, parsedValue };
     };
 
     // 2. Blood Sugar (FBS & HbA1c)
-    const fbs = getLatestLab(['Fasting Blood Sugar', 'FBS', 'Glucose']);
-    if (fbs && fbs.Value) {
-      const val = parseFloat(fbs.Value);
+    const fbs = getLatestLab(['Fasting Blood Sugar', 'FBS', 'Glucose'], ['average', 'eag', 'urine']);
+    if (fbs) {
+      const val = fbs.parsedValue;
       let status = '';
       let color = '';
       let advice = '';
@@ -120,9 +158,16 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
       });
     }
 
-    const hba1c = getLatestLab(['HbA1c', 'Hemoglobin A1c']);
-    if (hba1c && hba1c.Value) {
-      const val = parseFloat(hba1c.Value);
+    const hba1c = getLatestLab(['HbA1c', 'Hemoglobin A1c'], ['average', 'eag']);
+    if (hba1c) {
+      let val = hba1c.parsedValue;
+      
+      // Handle IFCC (mmol/mol) to NGSP (%) conversion if value is high
+      // 5.3% NGSP is ~34 mmol/mol IFCC. If > 20, it's likely IFCC.
+      if (val > 20) {
+        val = parseFloat(((0.09148 * val) + 2.152).toFixed(1));
+      }
+
       let status = '';
       let color = '';
       let advice = '';
@@ -145,7 +190,7 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
         category: 'น้ำตาลสะสม (HbA1c)',
         date: hba1c.Date,
         value: val,
-        unit: hba1c.Unit || '%',
+        unit: '%',
         status,
         color,
         icon: Droplets,
@@ -154,9 +199,9 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
     }
 
     // 3. Lipid Profile
-    const ldl = getLatestLab(['LDL', 'Low Density Lipoprotein']);
-    if (ldl && ldl.Value) {
-      const val = parseFloat(ldl.Value);
+    const ldl = getLatestLab(['LDL', 'Low Density Lipoprotein'], ['ratio']);
+    if (ldl) {
+      const val = ldl.parsedValue;
       let status = '';
       let color = '';
       let advice = '';
@@ -191,9 +236,9 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
       });
     }
 
-    const hdl = getLatestLab(['HDL', 'High Density Lipoprotein']);
-    if (hdl && hdl.Value) {
-      const val = parseFloat(hdl.Value);
+    const hdl = getLatestLab(['HDL', 'High Density Lipoprotein'], ['ratio']);
+    if (hdl) {
+      const val = hdl.parsedValue;
       // Default to male threshold if gender not specified, but adjust if female
       const threshold = isFemale ? 50 : 40;
       
@@ -227,9 +272,9 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
       });
     }
 
-    const tg = getLatestLab(['Triglyceride', 'TG']);
-    if (tg && tg.Value) {
-      const val = parseFloat(tg.Value);
+    const tg = getLatestLab(['Triglyceride', 'TG'], ['ratio']);
+    if (tg) {
+      const val = tg.parsedValue;
       let status = '';
       let color = '';
       let advice = '';
@@ -261,10 +306,10 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
     }
 
     // Lipid Ratios
-    const tc = getLatestLab(['Total Cholesterol', 'Cholesterol', 'TC']);
-    if (tc && tc.Value && hdl && hdl.Value) {
-      const tcVal = parseFloat(tc.Value);
-      const hdlVal = parseFloat(hdl.Value);
+    const tc = getLatestLab(['Total Cholesterol', 'Cholesterol', 'TC'], ['hdl', 'ldl', 'ratio']);
+    if (tc && hdl) {
+      const tcVal = tc.parsedValue;
+      const hdlVal = hdl.parsedValue;
       const ratio = tcVal / hdlVal;
       
       let status = '';
@@ -297,9 +342,9 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
       });
     }
 
-    if (ldl && ldl.Value && hdl && hdl.Value) {
-      const ldlVal = parseFloat(ldl.Value);
-      const hdlVal = parseFloat(hdl.Value);
+    if (ldl && hdl) {
+      const ldlVal = ldl.parsedValue;
+      const hdlVal = hdl.parsedValue;
       const ratio = ldlVal / hdlVal;
       
       let status = '';
@@ -332,9 +377,9 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
       });
     }
 
-    if (tg && tg.Value && hdl && hdl.Value) {
-      const tgVal = parseFloat(tg.Value);
-      const hdlVal = parseFloat(hdl.Value);
+    if (tg && hdl) {
+      const tgVal = tg.parsedValue;
+      const hdlVal = hdl.parsedValue;
       const ratio = tgVal / hdlVal;
       
       let status = '';
@@ -369,8 +414,8 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
 
     // Inflammation Markers
     const crp = getLatestLab(['hs-CRP', 'hsCRP', 'C-Reactive Protein']);
-    if (crp && crp.Value) {
-      const val = parseFloat(crp.Value);
+    if (crp) {
+      const val = crp.parsedValue;
       let status = '';
       let color = '';
       let advice = '';
@@ -402,8 +447,8 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
     }
 
     const esr = getLatestLab(['ESR', 'Erythrocyte Sedimentation Rate']);
-    if (esr && esr.Value) {
-      const val = parseFloat(esr.Value);
+    if (esr) {
+      const val = esr.parsedValue;
       const threshold = isFemale ? 20 : 15;
       
       let status = '';
@@ -434,8 +479,8 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
 
     // Tumor Markers
     const cea = getLatestLab(['CEA', 'Carcinoembryonic']);
-    if (cea && cea.Value) {
-      const val = parseFloat(cea.Value);
+    if (cea) {
+      const val = cea.parsedValue;
       let status = '';
       let color = '';
       let advice = '';
@@ -463,8 +508,8 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
     }
 
     const afp = getLatestLab(['AFP', 'Alpha-fetoprotein', 'Alpha fetoprotein']);
-    if (afp && afp.Value) {
-      const val = parseFloat(afp.Value);
+    if (afp) {
+      const val = afp.parsedValue;
       let status = '';
       let color = '';
       let advice = '';
@@ -492,8 +537,8 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
     }
 
     const psa = getLatestLab(['PSA', 'Prostate Specific Antigen']);
-    if (psa && psa.Value && isMale) {
-      const val = parseFloat(psa.Value);
+    if (psa && isMale) {
+      const val = psa.parsedValue;
       let status = '';
       let color = '';
       let advice = '';
@@ -521,8 +566,8 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
     }
 
     const ca125 = getLatestLab(['CA 125', 'CA125']);
-    if (ca125 && ca125.Value && isFemale) {
-      const val = parseFloat(ca125.Value);
+    if (ca125 && isFemale) {
+      const val = ca125.parsedValue;
       let status = '';
       let color = '';
       let advice = '';
@@ -550,8 +595,8 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
     }
 
     const ca153 = getLatestLab(['CA 15-3', 'CA15-3', 'CA153']);
-    if (ca153 && ca153.Value && isFemale) {
-      const val = parseFloat(ca153.Value);
+    if (ca153 && isFemale) {
+      const val = ca153.parsedValue;
       let status = '';
       let color = '';
       let advice = '';
@@ -579,8 +624,8 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
     }
 
     const ca199 = getLatestLab(['CA 19-9', 'CA19-9', 'CA199']);
-    if (ca199 && ca199.Value) {
-      const val = parseFloat(ca199.Value);
+    if (ca199) {
+      const val = ca199.parsedValue;
       let status = '';
       let color = '';
       let advice = '';
@@ -608,12 +653,12 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
     }
 
     // 4. Hydration & Protein (BUN/Creatinine)
-    const bun = getLatestLab(['BUN', 'Blood Urea Nitrogen']);
-    const cr = getLatestLab(['Creatinine', 'Cr']);
+    const bun = getLatestLab(['BUN', 'Blood Urea Nitrogen'], ['ratio']);
+    const cr = getLatestLab(['Creatinine', 'Cr'], ['ratio', 'clearance']);
     
-    if (bun && bun.Value && cr && cr.Value) {
-      const bunVal = parseFloat(bun.Value);
-      const crVal = parseFloat(cr.Value);
+    if (bun && cr) {
+      const bunVal = bun.parsedValue;
+      const crVal = cr.parsedValue;
       const ratio = bunVal / crVal;
       
       let status = '';
@@ -647,8 +692,8 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
     }
 
     // 5. Kidney Function (eGFR - CKD-EPI 2021)
-    if (cr && cr.Value && age !== null && (isMale || isFemale)) {
-      const crVal = parseFloat(cr.Value);
+    if (cr && age !== null && (isMale || isFemale)) {
+      const crVal = cr.parsedValue;
       let egfr = 0;
       
       if (isFemale) {
@@ -709,8 +754,8 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
 
     // 6. Thyroid Function (TSH)
     const tsh = getLatestLab(['TSH', 'Thyroid Stimulating Hormone']);
-    if (tsh && tsh.Value) {
-      const val = parseFloat(tsh.Value);
+    if (tsh) {
+      const val = tsh.parsedValue;
       let status = '';
       let color = '';
       let advice = '';
@@ -745,9 +790,9 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
       });
     }
 
-    const ft3 = getLatestLab(['Free T3', 'FT3']);
-    if (ft3 && ft3.Value) {
-      const val = parseFloat(ft3.Value);
+    const ft3 = getLatestLab(['Free T3', 'FT3'], ['total']);
+    if (ft3) {
+      const val = ft3.parsedValue;
       let status = '';
       let color = '';
       let advice = '';
@@ -778,9 +823,9 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
       });
     }
 
-    const ft4 = getLatestLab(['Free T4', 'FT4']);
-    if (ft4 && ft4.Value) {
-      const val = parseFloat(ft4.Value);
+    const ft4 = getLatestLab(['Free T4', 'FT4'], ['total']);
+    if (ft4) {
+      const val = ft4.parsedValue;
       let status = '';
       let color = '';
       let advice = '';
@@ -812,9 +857,9 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
     }
 
     // 7. Liver Function
-    const ast = getLatestLab(['AST', 'SGOT']);
-    if (ast && ast.Value) {
-      const val = parseFloat(ast.Value);
+    const ast = getLatestLab(['AST', 'SGOT', 'Aspartate Aminotransferase'], ['ratio']);
+    if (ast) {
+      const val = ast.parsedValue;
       let status = '';
       let color = '';
       let advice = '';
@@ -822,11 +867,15 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
       if (val <= 40) {
         status = 'ปกติ (Normal)';
         color = 'text-emerald-600 bg-emerald-50 border-emerald-200';
-        advice = 'การทำงานของตับ (AST) อยู่ในเกณฑ์ปกติ';
+        advice = 'ค่าเอนไซม์ตับ AST อยู่ในเกณฑ์ปกติ';
+      } else if (val <= 80) {
+        status = 'สูงเล็กน้อย (Mildly Elevated)';
+        color = 'text-amber-600 bg-amber-50 border-amber-200';
+        advice = 'ค่าเอนไซม์ตับสูงเล็กน้อย อาจเกิดจากการดื่มแอลกอฮอล์ การใช้ยาบางชนิด หรือภาวะไขมันพอกตับ';
       } else {
         status = 'สูง (High)';
         color = 'text-rose-600 bg-rose-50 border-rose-200';
-        advice = 'ค่า AST สูง บ่งชี้ว่าอาจมีเซลล์ตับอักเสบหรือเสียหาย ควรหลีกเลี่ยงแอลกอฮอล์และปรึกษาแพทย์';
+        advice = 'ค่าเอนไซม์ตับสูงกว่าปกติ บ่งชี้ว่าอาจมีการอักเสบหรือความเสียหายของเซลล์ตับ ควรพบแพทย์เพื่อตรวจเพิ่มเติม';
       }
 
       results.push({
@@ -841,9 +890,9 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
       });
     }
 
-    const alt = getLatestLab(['ALT', 'SGPT']);
-    if (alt && alt.Value) {
-      const val = parseFloat(alt.Value);
+    const alt = getLatestLab(['ALT', 'SGPT', 'Alanine Aminotransferase'], ['ratio']);
+    if (alt) {
+      const val = alt.parsedValue;
       let status = '';
       let color = '';
       let advice = '';
@@ -851,11 +900,15 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
       if (val <= 40) {
         status = 'ปกติ (Normal)';
         color = 'text-emerald-600 bg-emerald-50 border-emerald-200';
-        advice = 'การทำงานของตับ (ALT) อยู่ในเกณฑ์ปกติ';
+        advice = 'ค่าเอนไซม์ตับ ALT อยู่ในเกณฑ์ปกติ';
+      } else if (val <= 80) {
+        status = 'สูงเล็กน้อย (Mildly Elevated)';
+        color = 'text-amber-600 bg-amber-50 border-amber-200';
+        advice = 'ค่า ALT สูงเล็กน้อย มักสัมพันธ์กับภาวะไขมันพอกตับ หรือตับอักเสบระยะแรก';
       } else {
         status = 'สูง (High)';
         color = 'text-rose-600 bg-rose-50 border-rose-200';
-        advice = 'ค่า ALT สูง บ่งชี้ว่าอาจมีภาวะตับอักเสบหรือไขมันพอกตับ ควรควบคุมน้ำหนักและปรึกษาแพทย์';
+        advice = 'ค่า ALT สูง บ่งชี้ภาวะตับอักเสบที่ชัดเจน ควรพบแพทย์เพื่อหาสาเหตุ';
       }
 
       results.push({
@@ -870,29 +923,29 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
       });
     }
 
-    const alp = getLatestLab(['ALP', 'Alkaline Phosphatase']);
-    if (alp && alp.Value) {
-      const val = parseFloat(alp.Value);
+    const alp = getLatestLab(['ALP', 'Alkaline Phosphatase'], ['isoenzyme']);
+    if (alp) {
+      const val = alp.parsedValue;
       let status = '';
       let color = '';
       let advice = '';
 
-      if (val < 40) {
-        status = 'ต่ำ (Low)';
-        color = 'text-amber-600 bg-amber-50 border-amber-200';
-        advice = 'ค่า ALP ต่ำ อาจพบได้ในภาวะขาดสารอาหารบางชนิด';
-      } else if (val >= 40 && val <= 120) {
+      if (val >= 40 && val <= 130) {
         status = 'ปกติ (Normal)';
         color = 'text-emerald-600 bg-emerald-50 border-emerald-200';
-        advice = 'การทำงานของตับและระบบน้ำดี (ALP) อยู่ในเกณฑ์ปกติ';
-      } else {
+        advice = 'ค่า ALP อยู่ในเกณฑ์ปกติ';
+      } else if (val > 130) {
         status = 'สูง (High)';
         color = 'text-rose-600 bg-rose-50 border-rose-200';
-        advice = 'ค่า ALP สูง อาจสัมพันธ์กับความผิดปกติของระบบน้ำดี ตับ หรือกระดูก ควรปรึกษาแพทย์';
+        advice = 'ค่า ALP สูง อาจเกิดจากปัญหาท่อน้ำดีอุดตัน หรือปัญหาเกี่ยวกับกระดูก ควรปรึกษาแพทย์';
+      } else {
+        status = 'ต่ำ (Low)';
+        color = 'text-blue-600 bg-blue-50 border-blue-200';
+        advice = 'ค่า ALP ต่ำกว่าปกติ อาจเกิดจากการขาดสารอาหารบางชนิด';
       }
 
       results.push({
-        category: 'การทำงานของตับ (ALP)',
+        category: 'การทำงานของตับ/กระดูก (ALP)',
         date: alp.Date,
         value: val,
         unit: alp.Unit || 'U/L',
@@ -1016,16 +1069,18 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
       ],
       'การทำงานของตับ (AST)': [
         '<= 40 : ปกติ (Normal)',
-        '> 40 : สูง (High)'
+        '41 - 80 : สูงเล็กน้อย (Mildly Elevated)',
+        '> 80 : สูง (High)'
       ],
       'การทำงานของตับ (ALT)': [
         '<= 40 : ปกติ (Normal)',
-        '> 40 : สูง (High)'
+        '41 - 80 : สูงเล็กน้อย (Mildly Elevated)',
+        '> 80 : สูง (High)'
       ],
-      'การทำงานของตับ (ALP)': [
-        '< 40 : ต่ำ (Low)',
-        '40 - 120 : ปกติ (Normal)',
-        '> 120 : สูง (High)'
+      'การทำงานของตับ/กระดูก (ALP)': [
+        '40 - 130 : ปกติ (Normal)',
+        '> 130 : สูง (High)',
+        '< 40 : ต่ำ (Low)'
       ]
     };
 

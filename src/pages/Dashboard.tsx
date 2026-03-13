@@ -76,6 +76,7 @@ export default function Dashboard() {
   const getAgeInYears = () => {
     if (!profile?.BirthDate) return null;
     const birthDate = new Date(profile.BirthDate);
+    if (isNaN(birthDate.getTime())) return null;
     const today = new Date();
     let age = today.getFullYear() - birthDate.getFullYear();
     const m = today.getMonth() - birthDate.getMonth();
@@ -91,38 +92,68 @@ export default function Dashboard() {
   // Group Labs by Date for multi-line charts
   const groupedLabs = filteredLabs.reduce((acc: any, curr: any) => {
     if (!acc[curr.Date]) acc[curr.Date] = { date: curr.Date };
-    const name = curr.TestName?.toLowerCase() || '';
-    const val = parseFloat(curr.Value);
+    const name = (curr.TestName || '').toLowerCase();
+    
+    const getVal = (l: any) => {
+      const rawVal = l.Value ?? l.ResultValue ?? l.Result ?? l.value;
+      if (rawVal === undefined || rawVal === null) return NaN;
+      const stringVal = String(rawVal);
+      const match = stringVal.match(/[-+]?\d*\.?\d+/);
+      return match ? parseFloat(match[0]) : NaN;
+    };
+    
+    const val = getVal(curr);
     if (isNaN(val)) return acc;
 
-    if (name.includes('creatinine') || name === 'cr') acc[curr.Date].cr = val;
-    if (name === 'fasting blood sugar' || name === 'fbs' || name === 'glucose') acc[curr.Date].fbs = val;
-    if (name === 'hba1c' || name.includes('hemoglobin a1c')) acc[curr.Date].hba1c = val;
-    if (name === 'ast' || name.includes('sgot')) acc[curr.Date].ast = val;
-    if (name === 'alt' || name.includes('sgpt')) acc[curr.Date].alt = val;
-    if (name.includes('ldl') || name.includes('low density')) acc[curr.Date].ldl = val;
-    if (name.includes('hdl') || name.includes('high density')) acc[curr.Date].hdl = val;
-    if (name.includes('triglyceride') || name === 'tg') acc[curr.Date].tg = val;
-    if (name.includes('total cholesterol') || name === 'cholesterol' || name === 'tc') acc[curr.Date].tc = val;
+    const checkWord = (k: string) => {
+      const keyword = k.toLowerCase();
+      if (name === keyword) return true;
+      if (keyword.length <= 4) {
+        const regex = new RegExp(`(^|[^a-z0-9])${keyword}([^a-z0-9]|$)`, 'i');
+        return regex.test(name);
+      }
+      return name.includes(keyword);
+    };
+
+    const matches = (keywords: string[]) => keywords.some(checkWord);
+
+    if (matches(['creatinine', 'cr']) && !matches(['ratio', 'clearance']) && acc[curr.Date].cr === undefined) acc[curr.Date].cr = val;
+    if (matches(['fasting blood sugar', 'fbs', 'glucose']) && !matches(['average', 'eag', 'urine']) && acc[curr.Date].fbs === undefined) acc[curr.Date].fbs = val;
+    if (matches(['hba1c', 'hemoglobin a1c']) && !matches(['average', 'eag']) && acc[curr.Date].hba1c === undefined) {
+      // Handle IFCC (mmol/mol) to NGSP (%) conversion if value is high
+      let hba1cVal = val;
+      if (hba1cVal > 20) {
+        hba1cVal = parseFloat(((0.09148 * hba1cVal) + 2.152).toFixed(1));
+      }
+      acc[curr.Date].hba1c = hba1cVal;
+    }
+    if (matches(['ast', 'sgot']) && !matches(['ratio']) && acc[curr.Date].ast === undefined) acc[curr.Date].ast = val;
+    if (matches(['alt', 'sgpt']) && !matches(['ratio']) && acc[curr.Date].alt === undefined) acc[curr.Date].alt = val;
+    if (matches(['alp', 'alkaline phosphatase']) && !matches(['isoenzyme']) && acc[curr.Date].alp === undefined) acc[curr.Date].alp = val;
+    if (matches(['bun', 'blood urea nitrogen']) && !matches(['ratio']) && acc[curr.Date].bun === undefined) acc[curr.Date].bun = val;
+    if (matches(['ldl', 'low density']) && !matches(['ratio']) && acc[curr.Date].ldl === undefined) acc[curr.Date].ldl = val;
+    if (matches(['hdl', 'high density']) && !matches(['ratio']) && acc[curr.Date].hdl === undefined) acc[curr.Date].hdl = val;
+    if (matches(['triglyceride', 'tg']) && !matches(['ratio']) && acc[curr.Date].tg === undefined) acc[curr.Date].tg = val;
+    if (matches(['total cholesterol', 'cholesterol', 'tc']) && !matches(['hdl', 'ldl', 'ratio']) && acc[curr.Date].tc === undefined) acc[curr.Date].tc = val;
     
     // Thyroid
-    if (name === 'tsh' || name.includes('thyroid stimulating')) acc[curr.Date].tsh = val;
-    if (name === 'ft3' || name.includes('free t3')) acc[curr.Date].ft3 = val;
-    if (name === 'ft4' || name.includes('free t4')) acc[curr.Date].ft4 = val;
-    if (name === 't3' || name.includes('triiodothyronine') && !name.includes('free')) acc[curr.Date].t3 = val;
-    if (name === 't4' || name.includes('thyroxine') && !name.includes('free')) acc[curr.Date].t4 = val;
+    if (matches(['tsh', 'thyroid stimulating']) && acc[curr.Date].tsh === undefined) acc[curr.Date].tsh = val;
+    if (matches(['ft3', 'free t3']) && !matches(['total']) && acc[curr.Date].ft3 === undefined) acc[curr.Date].ft3 = val;
+    if (matches(['ft4', 'free t4']) && !matches(['total']) && acc[curr.Date].ft4 === undefined) acc[curr.Date].ft4 = val;
+    if (matches(['t3', 'triiodothyronine']) && !matches(['free']) && acc[curr.Date].t3 === undefined) acc[curr.Date].t3 = val;
+    if (matches(['t4', 'thyroxine']) && !matches(['free']) && acc[curr.Date].t4 === undefined) acc[curr.Date].t4 = val;
 
     // Inflammation
-    if (name === 'hs-crp' || name === 'hscrp' || name.includes('c-reactive protein')) acc[curr.Date].crp = val;
-    if (name === 'esr' || name.includes('erythrocyte sedimentation rate')) acc[curr.Date].esr = val;
+    if (matches(['hs-crp', 'hscrp', 'c-reactive protein']) && acc[curr.Date].crp === undefined) acc[curr.Date].crp = val;
+    if (matches(['esr', 'erythrocyte sedimentation rate']) && acc[curr.Date].esr === undefined) acc[curr.Date].esr = val;
 
     // Tumor Markers
-    if (name === 'cea' || name.includes('carcinoembryonic')) acc[curr.Date].cea = val;
-    if (name === 'afp' || name.includes('alpha-fetoprotein') || name.includes('alpha fetoprotein')) acc[curr.Date].afp = val;
-    if (name === 'psa' || name.includes('prostate specific antigen')) acc[curr.Date].psa = val;
-    if (name === 'ca 125' || name === 'ca125') acc[curr.Date].ca125 = val;
-    if (name === 'ca 15-3' || name === 'ca15-3' || name === 'ca153') acc[curr.Date].ca153 = val;
-    if (name === 'ca 19-9' || name === 'ca19-9' || name === 'ca199') acc[curr.Date].ca199 = val;
+    if (matches(['cea', 'carcinoembryonic']) && acc[curr.Date].cea === undefined) acc[curr.Date].cea = val;
+    if (matches(['afp', 'alpha-fetoprotein', 'alpha fetoprotein']) && acc[curr.Date].afp === undefined) acc[curr.Date].afp = val;
+    if (matches(['psa', 'prostate specific antigen']) && acc[curr.Date].psa === undefined) acc[curr.Date].psa = val;
+    if (matches(['ca 125', 'ca125']) && acc[curr.Date].ca125 === undefined) acc[curr.Date].ca125 = val;
+    if (matches(['ca 15-3', 'ca15-3', 'ca153']) && acc[curr.Date].ca153 === undefined) acc[curr.Date].ca153 = val;
+    if (matches(['ca 19-9', 'ca19-9', 'ca199']) && acc[curr.Date].ca199 === undefined) acc[curr.Date].ca199 = val;
 
     return acc;
   }, {});

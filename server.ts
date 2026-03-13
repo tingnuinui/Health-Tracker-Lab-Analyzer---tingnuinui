@@ -44,8 +44,8 @@ const WHITELIST_EMAILS = [
 'tonhc003@gmail.com',
 'tonhc004@gmail.com',
 'thunyalukusa@gmail.com',
-'tingnuinui@gmail.com',
-'tingnuinui2@gmail.com'
+'tingnuinui@gmail2.com',
+'tingnuinui2@gmail2.com'
 ];
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
 const GOOGLE_SHEET_ID = process.env.GOOGLE_SHEET_ID;
@@ -96,7 +96,7 @@ const authenticate = (req: express.Request, res: express.Response, next: express
 
 const REQUIRED_SHEETS: Record<string, string[]> = {
   'Vitals': ['Date', 'Time', 'BloodPressure', 'HeartRate', 'Temperature', 'Weight', 'BloodSugar', 'Notes'],
-  'LabResults': ['Date', 'TestName', 'ResultValue', 'Unit', 'ReferenceRange', 'Status', 'Notes'],
+  'LabResults': ['Date', 'TestName', 'Value', 'Unit', 'ReferenceRange', 'Status', 'Notes'],
   'Medications': ['MedicationName', 'Dosage', 'Frequency', 'Purpose', 'StartDate', 'EndDate', 'Notes'],
   'HealthEvents': ['Date', 'EventName', 'Category', 'Severity', 'Location', 'Treatment', 'Notes'],
   'Profile': ['Name', 'Age', 'Gender', 'BloodType', 'Height', 'Weight', 'Allergies', 'ChronicConditions', 'EmergencyContact'],

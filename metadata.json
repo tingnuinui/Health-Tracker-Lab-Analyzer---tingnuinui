@@ -1,5 +1,5 @@
 {
-  "name": "Health Tracker \u0026 Lab Analyzer - tingnuinui",
+  "name": "Health Tracker & Lab Analyzer",
   "description": "Personal health tracking app with Google Sheets integration and AI-powered lab result analysis.",
   "requestFramePermissions": []
 }
