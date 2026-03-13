@@ -44,8 +44,8 @@ const WHITELIST_EMAILS = [
 'tonhc003@gmail.com',
 'tonhc004@gmail.com',
 'thunyalukusa@gmail.com',
-'tingnuinui@gmail2.com',
-'tingnuinui2@gmail2.com'
+'tingnuinui@gmail.com',
+'tingnuinui2@gmail.com'
 ];
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
 const GOOGLE_SHEET_ID = process.env.GOOGLE_SHEET_ID;
