@@ -117,7 +117,8 @@ export default function Dashboard() {
 
     const matches = (keywords: string[]) => keywords.some(checkWord);
 
-    if (matches(['creatinine', 'cr']) && !matches(['ratio', 'clearance']) && acc[curr.Date].cr === undefined) acc[curr.Date].cr = val;
+    if (matches(['creatinine', 'cr']) && !matches(['ratio', 'clearance', 'egfr', 'e gfr']) && acc[curr.Date].cr === undefined) acc[curr.Date].cr = val;
+    if (matches(['egfr', 'e gfr', 'glomerular filtration rate']) && acc[curr.Date].egfr === undefined) acc[curr.Date].egfr = val;
     if (matches(['fasting blood sugar', 'fbs', 'glucose']) && !matches(['average', 'eag', 'urine']) && acc[curr.Date].fbs === undefined) acc[curr.Date].fbs = val;
     if (matches(['hba1c', 'hemoglobin a1c']) && !matches(['average', 'eag']) && acc[curr.Date].hba1c === undefined) {
       // Handle IFCC (mmol/mol) to NGSP (%) conversion if value is high
@@ -162,15 +163,17 @@ export default function Dashboard() {
 
   labTrendData.forEach((d: any) => {
     if (d.cr && age !== null && (isMale || isFemale)) {
-      let egfr = 0;
-      if (isFemale) {
-        if (d.cr <= 0.7) egfr = 142 * Math.pow(d.cr / 0.7, -0.241) * Math.pow(0.9938, age) * 1.012;
-        else egfr = 142 * Math.pow(d.cr / 0.7, -1.200) * Math.pow(0.9938, age) * 1.012;
-      } else {
-        if (d.cr <= 0.9) egfr = 142 * Math.pow(d.cr / 0.9, -0.302) * Math.pow(0.9938, age);
-        else egfr = 142 * Math.pow(d.cr / 0.9, -1.200) * Math.pow(0.9938, age);
+      if (d.egfr === undefined) {
+        let egfr = 0;
+        if (isFemale) {
+          if (d.cr <= 0.7) egfr = 142 * Math.pow(d.cr / 0.7, -0.241) * Math.pow(0.9938, age) * 1.012;
+          else egfr = 142 * Math.pow(d.cr / 0.7, -1.200) * Math.pow(0.9938, age) * 1.012;
+        } else {
+          if (d.cr <= 0.9) egfr = 142 * Math.pow(d.cr / 0.9, -0.302) * Math.pow(0.9938, age);
+          else egfr = 142 * Math.pow(d.cr / 0.9, -1.200) * Math.pow(0.9938, age);
+        }
+        d.egfr = parseFloat(egfr.toFixed(1));
       }
-      d.egfr = parseFloat(egfr.toFixed(1));
     }
     
     // Lipid Ratios

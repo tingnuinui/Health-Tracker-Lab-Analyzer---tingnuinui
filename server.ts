@@ -220,7 +220,7 @@ app.get(['/api/auth/callback', '/api/auth/callback/'], async (req, res) => {
       httpOnly: true,
       secure: true,
       sameSite: 'none',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      // Removed maxAge to make it a session cookie that expires when the browser is closed
     });
 
     res.send(`

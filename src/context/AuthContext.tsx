@@ -20,7 +20,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchUser();
+    const initSession = async () => {
+      if (!sessionStorage.getItem('app_session_active')) {
+        // Fresh open: force logout to ensure user must sign in again
+        try {
+          await fetch('/api/auth/logout', { method: 'POST' });
+        } catch (e) {
+          console.error('Initial logout failed', e);
+        }
+        sessionStorage.setItem('app_session_active', 'true');
+        setUser(null);
+        setLoading(false);
+      } else {
+        // Already active in this tab, just fetch user
+        fetchUser();
+      }
+    };
+
+    initSession();
     
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {

@@ -654,7 +654,7 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
 
     // 4. Hydration & Protein (BUN/Creatinine)
     const bun = getLatestLab(['BUN', 'Blood Urea Nitrogen'], ['ratio']);
-    const cr = getLatestLab(['Creatinine', 'Cr'], ['ratio', 'clearance']);
+    const cr = getLatestLab(['Creatinine', 'Cr'], ['ratio', 'clearance', 'egfr', 'e gfr']);
     
     if (bun && cr) {
       const bunVal = bun.parsedValue;
@@ -692,45 +692,54 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
     }
 
     // 5. Kidney Function (eGFR - CKD-EPI 2021)
-    if (cr && age !== null && (isMale || isFemale)) {
+    const egfrLab = getLatestLab(['eGFR', 'Glomerular Filtration Rate'], ['ratio']);
+    let egfrValue: number | null = null;
+    let egfrDate = '';
+
+    if (egfrLab) {
+      egfrValue = egfrLab.parsedValue;
+      egfrDate = egfrLab.Date;
+    } else if (cr && age !== null && (isMale || isFemale)) {
       const crVal = cr.parsedValue;
-      let egfr = 0;
+      egfrDate = cr.Date;
       
       if (isFemale) {
         if (crVal <= 0.7) {
-          egfr = 142 * Math.pow(crVal / 0.7, -0.241) * Math.pow(0.9938, age) * 1.012;
+          egfrValue = 142 * Math.pow(crVal / 0.7, -0.241) * Math.pow(0.9938, age) * 1.012;
         } else {
-          egfr = 142 * Math.pow(crVal / 0.7, -1.200) * Math.pow(0.9938, age) * 1.012;
+          egfrValue = 142 * Math.pow(crVal / 0.7, -1.200) * Math.pow(0.9938, age) * 1.012;
         }
       } else {
         if (crVal <= 0.9) {
-          egfr = 142 * Math.pow(crVal / 0.9, -0.302) * Math.pow(0.9938, age);
+          egfrValue = 142 * Math.pow(crVal / 0.9, -0.302) * Math.pow(0.9938, age);
         } else {
-          egfr = 142 * Math.pow(crVal / 0.9, -1.200) * Math.pow(0.9938, age);
+          egfrValue = 142 * Math.pow(crVal / 0.9, -1.200) * Math.pow(0.9938, age);
         }
       }
+    }
 
+    if (egfrValue !== null) {
       let status = '';
       let color = '';
       let advice = '';
 
-      if (egfr >= 90) {
+      if (egfrValue >= 90) {
         status = 'ปกติ (Stage 1)';
         color = 'text-emerald-600 bg-emerald-50 border-emerald-200';
         advice = 'การทำงานของไตปกติ (อ้างอิงตามอายุและเพศของคุณ)';
-      } else if (egfr >= 60) {
+      } else if (egfrValue >= 60) {
         status = 'ไตเสื่อมระยะเริ่มต้น (Stage 2)';
         color = 'text-blue-600 bg-blue-50 border-blue-200';
         advice = 'การทำงานของไตลดลงเล็กน้อย ควรดื่มน้ำให้เพียงพอและหลีกเลี่ยงยาแก้ปวดกลุ่ม NSAIDs';
-      } else if (egfr >= 45) {
+      } else if (egfrValue >= 45) {
         status = 'ไตเสื่อมระยะปานกลาง (Stage 3a)';
         color = 'text-amber-600 bg-amber-50 border-amber-200';
         advice = 'ควรปรึกษาแพทย์เพื่อชะลอความเสื่อมของไต ควบคุมความดันและน้ำตาลให้ดี';
-      } else if (egfr >= 30) {
+      } else if (egfrValue >= 30) {
         status = 'ไตเสื่อมระยะปานกลางถึงมาก (Stage 3b)';
         color = 'text-orange-600 bg-orange-50 border-orange-200';
         advice = 'ควรพบแพทย์เฉพาะทางโรคไต และควบคุมอาหารอย่างเคร่งครัด';
-      } else if (egfr >= 15) {
+      } else if (egfrValue >= 15) {
         status = 'ไตเสื่อมระยะรุนแรง (Stage 4)';
         color = 'text-rose-600 bg-rose-50 border-rose-200';
         advice = 'ไตทำงานได้น้อยมาก ต้องอยู่ในการดูแลของแพทย์อย่างใกล้ชิด';
@@ -742,8 +751,8 @@ export default function HealthAnalysis({ vitals, labs, profile }: HealthAnalysis
 
       results.push({
         category: 'การทำงานของไต (eGFR)',
-        date: cr.Date,
-        value: egfr.toFixed(1),
+        date: egfrDate,
+        value: egfrValue.toFixed(1),
         unit: 'mL/min/1.73m²',
         status,
         color,
