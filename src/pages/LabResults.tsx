@@ -2,15 +2,17 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Upload, FileText, CheckCircle2, AlertCircle, Save, X, Plus, Search, Calendar, Filter, Trash2, Edit2, ArrowUpDown } from 'lucide-react';
 import clsx from 'clsx';
 import Highlight from '../components/Highlight';
+import AIModelDropdown from '../components/AIModelDropdown';
+import { useAIModels } from '../context/AIModelContext';
 
 export default function LabResults() {
+  const { imageModels, selectedImageModel, setSelectedImageModel, defaultImageModel } = useAIModels();
   const [labs, setLabs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [extractedData, setExtractedData] = useState<any[] | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedNotes, setSelectedNotes] = useState('');
-  const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -75,7 +77,7 @@ export default function LabResults() {
         Return ONLY the JSON array. Do not include markdown formatting like \`\`\`json.
       `;
       
-      const data = await analyzeImage(file, prompt, selectedModel);
+      const data = await analyzeImage(file, prompt, selectedImageModel);
       setExtractedData(data);
       
       // Log usage to backend
@@ -301,25 +303,14 @@ export default function LabResults() {
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1 space-y-4">
               <div className="flex flex-wrap items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium text-slate-700 whitespace-nowrap">AI Model:</label>
-                  <select
-                    value={selectedModel}
-                    onChange={(e) => setSelectedModel(e.target.value)}
-                    disabled={uploading || saving}
-                    className="px-3 py-1.5 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all disabled:opacity-50"
-                  >
-                    <option value="gemini-3-flash-preview">Gemini 3 Flash Preview</option>
-                    <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
-                    <option value="gemini-3-pro-preview">Gemini 3.0 Pro Preview</option>
-                    <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash Lite Preview</option>
-                    <option value="gemini-flash-latest">Gemini Flash Latest</option>
-                    <option value="gemini-flash-lite-latest">Gemini Flash Lite Latest</option>
-                    <option value="gemini-2.5-flash">Gemini 2.5 Flash  (Default)</option>
-                    <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                    <option value="gemini-pro-latest">Gemini Pro (Latest Stable)</option>
-                  </select>
-                </div>
+                <AIModelDropdown
+                  models={imageModels}
+                  value={selectedImageModel}
+                  onChange={setSelectedImageModel}
+                  defaultModelId={defaultImageModel}
+                  disabled={uploading || saving}
+                  label="AI Model:"
+                />
                 <div className="flex items-center gap-2">
                   <label className="text-sm font-medium text-slate-700 whitespace-nowrap">Test Date:</label>
                   <input 

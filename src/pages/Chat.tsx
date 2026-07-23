@@ -3,8 +3,9 @@ import { Send, Bot, User, Stethoscope, AlertCircle, Loader2, Search, Calendar, F
 import Markdown from 'react-markdown';
 import clsx from 'clsx';
 import Highlight from '../components/Highlight';
-
 import { GoogleGenAI } from '@google/genai';
+import AIModelDropdown from '../components/AIModelDropdown';
+import { useAIModels } from '../context/AIModelContext';
 
 interface Message {
   role: 'user' | 'model';
@@ -13,6 +14,7 @@ interface Message {
 }
 
 export default function Chat() {
+  const { textModels, selectedTextModel, setSelectedTextModel, defaultTextModel } = useAIModels();
   const [messages, setMessages] = useState<Message[]>([
     { 
       role: 'model', 
@@ -20,7 +22,6 @@ export default function Chat() {
     }
   ]);
   const [input, setInput] = useState('');
-  const [selectedModel, setSelectedModel] = useState('gemini-3-flash-preview');
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingHistory, setIsFetchingHistory] = useState(true);
   const [error, setError] = useState('');
@@ -212,7 +213,7 @@ export default function Chat() {
       // Call Gemini API directly from frontend
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const response = await ai.models.generateContent({
-        model: selectedModel,
+        model: selectedTextModel,
         contents: alternatingMessages,
         config: {
           systemInstruction: systemInstruction,
@@ -284,22 +285,14 @@ export default function Chat() {
           >
             เริ่มแชตใหม่
           </button>
-          <select
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
+          <AIModelDropdown
+            models={textModels}
+            value={selectedTextModel}
+            onChange={setSelectedTextModel}
+            defaultModelId={defaultTextModel}
             disabled={isLoading}
-            className="px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all disabled:opacity-50"
-          >
-<option value="gemini-3-flash-preview">Gemini 3 Flash Preview  (Default)</option>
-<option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
-<option value="gemini-3-pro-preview">Gemini 3.0 Pro Preview</option>
-<option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash Lite Preview</option>
-<option value="gemini-flash-latest">Gemini Flash Latest</option>
-<option value="gemini-flash-lite-latest">Gemini Flash Lite Latest</option>
-<option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-<option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-<option value="gemini-pro-latest">Gemini Pro (Latest Stable)</option>
-          </select>
+            label=""
+          />
         </div>
       </div>
 
